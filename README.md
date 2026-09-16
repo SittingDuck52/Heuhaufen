@@ -1,8 +1,8 @@
 # Heuhaufen 1.23
 
-| Dashboard (Deutsch) | Dashboard (English) |
-| --- | --- |
-| <img src="bilder/dashboard-de.png" alt="Dashboard (Deutsch)" width="380"> | <img src="bilder/dashboard-en.png" alt="Dashboard (English)" width="380"> |
+| Dashboard (Deutsch) | Dashboard (English) | Home Assistant Card |
+| --- | --- | --- |
+| <img src="bilder/01-dashboard-de.png" alt="Dashboard (Deutsch)" width="380"> | <img src="bilder/02-dashboard-en.png" alt="Dashboard (English)" width="380"> | <img src="bilder/03-ha-card.png" alt="Home Assistant Card" width="380"> |
 
 
 Windows dashboard for searching the **Bitcoin puzzle** keys on NVIDIA GPUs, with
