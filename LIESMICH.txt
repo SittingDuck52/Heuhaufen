@@ -1,0 +1,244 @@
+Heuhaufen 1.23 - Suche nach dem Schluessel eines Bitcoin-Puzzles
+================================================================
+
+Worum es geht
+-------------
+Die Bitcoin-Puzzle-Transaktion von 2015 enthaelt Adressen, deren Schluessel absichtlich in einem
+kleinen Bereich liegen. Puzzle 71 ist noch offen und mit rund 7,1 BTC gefuellt. Die Chance, ihn zu
+finden, ist winzig - das hier ist ein Bastelprojekt, keine Geldanlage. Gesucht wird ausschliesslich
+in diesen Puzzle-Bereichen, nie nach fremden Wallets.
+
+Was gebraucht wird
+------------------
+- NVIDIA-Grafikkarte mit aktuellem Treiber, fuer das Standard-Suchprogramm CUDACyclone eine
+  GTX 16xx, RTX 20xx oder neuer (aeltere Karten: BitCrack, siehe unten). CUDA muss nicht
+  installiert sein, die noetige Laufzeitdatei liegt bei. nvidia-smi kommt mit dem Treiber.
+- Windows 10 oder 11.
+
+Sprache
+-------
+Fenster, Webseite und Meldungen richten sich nach der Windows-Anzeigesprache: Deutsch bei einem
+deutschen Windows, sonst Englisch. Fest einstellen in puzzle-config.ps1:  $Sprache = 'de'  (oder 'en').
+Protokolldateien schreibt das Programm immer auf Deutsch.
+
+Was wo liegt
+------------
+  puzzle.bat              Suche starten
+  tuning.bat              beste Einstellungen fuer die eigene Karte messen
+  puzzle-config.ps1       Einstellungen (mit dem Editor oeffnen)
+  TREFFER-Notfallplan.md  was zu tun ist, falls wirklich etwas gefunden wird (englisch: HIT-Emergency-Plan.md)
+  LIESMICH.txt            diese Datei (englisch: README.txt)
+  programm\               die Suchprogramme (CUDACyclone.exe, cuBitCrack.exe, cudart64_12.dll)
+  skripte\                die PowerShell-Skripte - hier muss man nichts anfassen
+  homeassistant\          Beispielkarten fuer ein Home-Assistant-Dashboard (siehe "Home Assistant")
+  daten\                  entsteht beim Suchen: Abschnitte (Shares), Fortschritt, Protokolle,
+                          Tuning-Bericht und - falls es passiert - die Trefferdatei found*.txt
+Den Ordner als Ganzes verschieben oder sichern, nicht einzelne Dateien daraus.
+
+Einrichten
+----------
+1. Zip entpacken, zum Beispiel nach C:\ - dabei entsteht der Ordner C:\Heuhaufen.
+2. Windows markiert entpackte Dateien als "aus dem Internet". Einmal im Ordner C:\Heuhaufen
+   eine PowerShell oeffnen und eingeben:
+       Get-ChildItem -Recurse | Unblock-File
+3. tuning.bat starten (siehe unten). Das misst die besten Einstellungen fuer die eigene Karte
+   und traegt sie auf Wunsch in puzzle-config.ps1 ein. Dauert je Karte etwa 5 bis 20 Minuten.
+4. puzzle-config.ps1 mit dem Editor oeffnen und durchsehen. Wichtig ist die Puzzle-Nummer.
+5. puzzle.bat starten. Windows fragt nach Administratorrechten, die braucht das Skript nur,
+   um das Power-Limit der Karte zu setzen und um Prozesse sauber zu beenden.
+
+Neue Fassung einspielen (es gibt schon einen Ordner, auch den alten C:\BitCrack)
+-------------------------------------------------------------------------------
+1. Die Suche beenden (im Fenster Strg+C, dann J).
+2. Das neue Zip entpacken, es entsteht C:\Heuhaufen (Unblock-File wie oben).
+3. Aus dem alten Ordner den Ordner daten\ und die eigene puzzle-config.ps1 in den neuen Ordner
+   kopieren und die mitgelieferten dabei ersetzen. In daten\ stehen Share, Fortschritt und die
+   Liste der fertigen Shares - die Suche macht damit genau an derselben Stelle weiter.
+4. puzzle.bat im neuen Ordner starten. Laeuft alles, kann der alte Ordner weg. Wer eine Aufgabe
+   in der Aufgabenplanung oder eine Verknuepfung hat, stellt sie auf den neuen Pfad um.
+Die Versionsnummer steht oben im Fenster und auf der Webseite.
+
+Beste Einstellungen ermitteln (tuning.bat)
+------------------------------------------
+Das Skript misst selbststaendig, fragt vorher nach Administratorrechten (fuer das Power-Limit)
+und macht je Kartenmodell mit dem eingestellten Suchprogramm (Standard CUDACyclone):
+- eine Rechenprobe: das Suchprogramm muss den bekannten Schluessel des geloesten Puzzles 32 finden,
+- eine Tuning-Reihe: die Arbeitspakete werden vergroessert (CUDACyclone: --grid, BitCrack: -b
+  und -p), bis es nicht mehr spuerbar schneller wird oder der Grafikspeicher knapp wuerde.
+  Gewaehlt wird die kleinste Einstellung, die fast so schnell ist wie die beste - das laesst
+  Grafikspeicher fuer andere Programme frei,
+- eine Leistungsreihe: das Power-Limit wird in Stufen gesenkt. Empfohlen wird die sparsamste
+  Stufe, die noch mindestens 90 % des Tempos bringt,
+- zum Schluss eine zweite Rechenprobe mit dem Ergebnis,
+- bei mehreren gleichen Karten zusaetzlich ein gemeinsamer Lauf: alle Karten rechnen gleichzeitig
+  mit dem empfohlenen Limit, je Stufe 5 Minuten. Wird eine Karte dabei zu heiss (Drosselung), wird
+  das Limit fuer alle in 10-%-Schritten gesenkt, bis keine mehr drosselt. Allein gemessen wird eine
+  Karte nicht so heiss wie im Verbund. Das kostet 5 bis 15 Minuten mehr.
+Danach wird das Power-Limit zurueckgesetzt, das Ergebnis steht in daten\tuning-<Rechnername>.txt.
+Waehrend der Messung die Grafikkarte nicht anderweitig benutzen und kein puzzle.bat offen haben.
+Abbrechen mit Strg+C oder Schliessen des Fensters, das Power-Limit wird dann zurueckgesetzt.
+
+Varianten (in einer PowerShell im Ordner C:\Heuhaufen):
+    .\tuning.bat -OhneLimit       nur das Tuning, Power-Limit bleibt, keine Adminrechte noetig
+    .\tuning.bat -Device 1        nur GPU 1 (sonst jedes Kartenmodell einmal)
+    .\tuning.bat -Einzeln         ohne gemeinsamen Lauf gleicher Karten
+    .\tuning.bat -MinTempo 95     Power-Limit: mindestens 95 % statt 90 % des Tempos
+    .\tuning.bat -Programm bitcrack   BitCrack statt CUDACyclone messen (traegt es auch so ein)
+
+Was das Fenster zeigt
+---------------------
+Fortschritt im aktuellen Abschnitt (Share), Tempo in MKey/s, Temperatur, Verbrauch und Kosten.
+Die Suche merkt sich regelmaessig ihren Stand (BitCrack jede Minute, CUDACyclone alle ein bis
+zwei Minuten), ein Neustart macht dort weiter. Abgesuchte Shares
+werden in daten\done*.txt festgehalten und nicht noch einmal gezogen. Es geht also nichts verloren,
+wenn der Rechner zwischendurch aus ist.
+
+Tasten
+------
+  P   Pause: das Suchprogramm wird beendet, die Karte ist frei. Nochmal P setzt fort.
+      Steht StartWartet in der Konfiguration auf $true, startet P die Suche ueberhaupt erst.
+  V   Automatische Pause an/aus (siehe "Automatische Pause").
+  W   Webseite an/aus (nur wenn WebPort gesetzt ist).
+  Strg+C fragt nach: J beendet, N (oder 30 s nichts) sucht weiter.
+
+Automatische Pause
+------------------
+Braucht ein anderes Programm die Grafikkarte, zum Beispiel ein Spiel, Videoschnitt oder ein
+KI-Programm, haelt die Suche von selbst an und laeuft danach wieder weiter. Erkannt wird das am
+Grafikspeicher, den andere Programme belegen (im Fenster "fremd ... MB"): Pause ab 2000 MB,
+weiter unter 1500 MB, jeweils nach einer kurzen Wartezeit. Einstellbar in puzzle-config.ps1 mit
+$VramPauseMB und $VramResumeMB; $VramPauseMB = 0 schaltet die Automatik ganz ab. Taste V schaltet
+sie im Fenster aus und wieder ein.
+Belegt der Rechner schon beim Start mehr als die Schwelle (z. B. mehrere grosse Monitore oder ein
+Browser mit vielen Tabs) oder pausiert die Suche dreimal innerhalb von 10 Minuten, schaltet sich
+die Automatik fuer diese Sitzung ab und sagt das in der Statuszeile. Dann $VramPauseMB hoeher
+setzen, z. B. 3000.
+Laeuft auf demselben Rechner Ollama, kann das Dashboard es direkt fragen ($OllamaApi in
+puzzle-config.ps1). Dann haelt die Suche an, sobald Ollama rechnet, und ein geparktes Modell stoert
+nicht.
+
+Webseite
+--------
+Mit der Suche startet ein kleiner Webserver. Im Browser zeigt http://<rechnername>:8080/ alle Karten
+samt Tempo und Temperatur, auch von einem anderen Rechner im selben Netz (auf dem Suchrechner selbst
+geht auch http://localhost:8080/). Dort gibt es auch Knoepfe fuer Pause, Weiter und Automatik.
+Die noetige Firewall-Regel legt das Skript beim ersten Start selbst an, allerdings nur fuer private
+Netze. Steht das Netzwerk in den Windows-Einstellungen auf "Oeffentlich", bleibt die Seite fuer andere
+Rechner unsichtbar - dann dort auf "Privat" umstellen. Die Seite hat kein Passwort: diesen Port nicht
+ins Internet weiterleiten. Abschalten mit $WebPort = 0 in puzzle-config.ps1; ist 8080 schon von einem
+anderen Programm belegt, einen anderen Port eintragen, z. B. 8090.
+Wird die Suche beendet, zeigt die Seite das noch kurz an, dann ist sie weg (der Webserver laeuft im
+Suchfenster mit).
+
+Fenster im Infobereich (Tray) oder minimiert
+--------------------------------------------
+In puzzle-config.ps1:
+
+    $Fenster = 'tray'             (oder 'minimiert', Standard 'normal')
+
+Mit 'tray' verschwindet das Fenster, unten rechts im Infobereich erscheint je Karte ein Symbol.
+Linksklick zeigt oder versteckt das Fenster, Minimieren schickt es wieder dorthin. Rechtsklick:
+Suche an/aus, Auto-Pause, Webseite, Beenden. Windows 11 legt neue Symbole zuerst in den Ueberlauf
+(Pfeil nach oben) - einmal in die Leiste ziehen. Solange das Fenster versteckt ist, gehen Strg+C
+und das X nicht; beendet wird dann ueber das Menue. Endet die Suche mit einem Treffer oder Fehler,
+erscheint das Fenster von selbst.
+
+Was sich das Dashboard merkt
+----------------------------
+Webseite an/aus, Auto-Pause an/aus und ob zuletzt gesucht wurde stehen in
+daten\merken-<Rechnername>-gpu<N>.json. Das gilt beim naechsten Start vor den Werten in
+puzzle-config.ps1: Lief die Suche beim Schliessen, sucht sie sofort weiter, auch mit
+$StartWartet = $true; war sie von Hand pausiert, steht das Fenster nur bereit. Datei loeschen =
+wieder die Werte aus der Konfiguration. $WebPort = 0 schaltet die Webseite immer ab.
+
+Home Assistant (MQTT)
+---------------------
+Laeuft Home Assistant mit einem MQTT-Broker (z. B. Mosquitto), meldet das Dashboard dorthin und
+nimmt Befehle an. In puzzle-config.ps1:
+
+    $MqttHost = 'homeassistant.local'     Name oder IP-Adresse des Brokers
+    $MqttUser = 'benutzer'                nur wenn der Broker eine Anmeldung verlangt
+    $MqttPass = 'passwort'
+
+Home Assistant legt das Geraet "Heuhaufen <RECHNERNAME> GPU <N>" von selbst an (MQTT Discovery):
+Zustand, Tempo, Fortschritt, Restzeit, Leistung, Temperatur, Luefter, Energie, Treffer (nur ja/nein,
+nie der Schluessel) und die Schalter Suche, Auto-Pause und Webseite. Die Schalter lassen sich auch in
+Automationen verwenden. Ist das Dashboard beendet, zeigt HA die Messwerte als "nicht verfuegbar".
+Wer mehrere Rechner hat: jeder meldet unter seinem eigenen Namen, das stoert sich nicht.
+
+Die Sensornamen richten sich nach der Sprache des Dashboards, wenn HA das Geraet anlegt, und HA bildet
+daraus die Entity-IDs (deutsch: sensor.heuhaufen_meinpc_gpu_0_tempo, englisch: ..._speed). Wechselt
+die Sprache spaeter, benennt HA die Sensoren um, die Entity-IDs bleiben.
+
+Eine fertige Karte fuer das HA-Dashboard liegt in homeassistant\heuhaufen-karte.yaml (fuer deutsche
+Entity-IDs; heuhaufen-card-en.yaml ist die englische). Im Dashboard
+"Karte hinzufuegen" -> "Manuell" waehlen, den Inhalt einfuegen und dabei "rechnername" ueberall
+durch den eigenen Rechnernamen in Kleinbuchstaben ersetzen, z. B. heuhaufen_meinpc_gpu_0. Fuer die
+zweite Grafikkarte eine Kopie mit gpu_1 anlegen. Die genauen Namen stehen in HA beim Geraet.
+Randfarbe und Fortschrittsbalken brauchen card-mod (aus HACS); ohne card-mod die card_mod-Bloecke
+loeschen.
+
+Mehrere Grafikkarten
+--------------------
+puzzle.bat startet je Karte ein eigenes Fenster, jede sucht in einem anderen Abschnitt.
+
+Zwei Suchprogramme: CUDACyclone (Standard) und BitCrack
+-------------------------------------------------------
+Im Ordner programm liegen zwei Suchprogramme. puzzle.bat und tuning.bat nehmen CUDACyclone.
+BitCrack ist die etwas langsamere, dafuer altbewaehrte Alternative. Umstellen in puzzle-config.ps1:
+
+    $Engine = 'bitcrack'          (zurueck mit $Engine = 'cyclone')
+
+oder nur fuer eine Karte im Profil mit  Engine = 'bitcrack'. tuning.bat richtet sich danach.
+
+Die Unterschiede (gemessen auf einer RTX 5060 Ti bei 150 W):
+- Tempo: CUDACyclone 1.720 MKey/s, BitCrack 991 MKey/s. CUDACyclone prueft also rund 74 % mehr
+  Schluessel mit demselben Strom (11,5 statt 6,6 MKey je Joule).
+- Grafikspeicher: CUDACyclone belegt rund 1,7 GB, BitCrack rund 0,5 GB. Das merkt nur, wer
+  nebenher Programme mit viel Grafikspeicher nutzt (z. B. Spiele, Videoschnitt oder KI-Programme).
+- Sicherung: BitCrack merkt sich den Stand jede Minute. CUDACyclone sucht in Bloecken und sichert
+  alle ein bis zwei Minuten einen Checkpoint; bei Pause oder Abbruch geht es am letzten Checkpoint
+  weiter. Das Fenster zeigt, wann der naechste Checkpoint kommt.
+- Karten: CUDACyclone laeuft ab GTX 16xx / RTX 20xx. Fuer aeltere Karten BitCrack nehmen.
+- Reife: BitCrack ist seit Jahren verbreitet, CUDACyclone ist neuer. Beide haben in diesem Paket
+  die bekannten Schluessel geloester Puzzles gefunden.
+Beide teilen den Bereich gleich auf: Share, Fortschritt und done-Liste bleiben beim Wechsel erhalten.
+Fehlt programm\CUDACyclone.exe, suchen puzzle.bat und tuning.bat mit BitCrack und sagen das.
+
+Automatisch beim Anmelden starten (freiwillig)
+----------------------------------------------
+Eine Verknuepfung im Autostart-Ordner fragt bei jeder Anmeldung nach Administratorrechten.
+Lautlos geht es ueber die Aufgabenplanung. Dazu einmal eine PowerShell oder Eingabeaufforderung
+ALS ADMINISTRATOR oeffnen und eingeben (den Pfad auf den eigenen Ordner anpassen):
+
+    schtasks /create /tn Heuhaufen /tr "C:\Heuhaufen\puzzle.bat" /sc onlogon /rl highest /f
+
+Ab dann geht das Fenster bei jeder Anmeldung von selbst auf. Sinnvoll zusammen mit
+
+    $StartWartet = $true
+
+in der puzzle-config.ps1: Das Fenster steht dann nur bereit und rechnet erst, wenn man im Fenster
+P drueckt oder auf der Webseite auf "Suche starten" klickt. Ausnahme: Lief die Suche beim letzten
+Schliessen, sucht sie sofort weiter (siehe "Was sich das Dashboard merkt").
+
+Weitere Befehle:
+
+    schtasks /run /tn Heuhaufen        von Hand starten, ohne Nachfrage
+    schtasks /query /tn Heuhaufen      nachsehen, ob die Aufgabe existiert
+    schtasks /delete /tn Heuhaufen /f  Aufgabe wieder entfernen
+
+Wer lieber klickt: Aufgabenplanung oeffnen, Aufgabe erstellen, Trigger "Bei Anmeldung", Aktion
+"Programm starten" mit puzzle.bat, und unten den Haken bei "Mit hoechsten Privilegien ausfuehren".
+Ohne diesen Haken kommt die Rechteabfrage trotzdem.
+
+Wenn tatsaechlich etwas gefunden wird
+-------------------------------------
+Das Fenster zeigt einen gruenen Kasten und piept, der Schluessel steht in daten\found*.txt.
+Dann bitte TREFFER-Notfallplan.md lesen, bevor irgendetwas passiert. Das Wichtigste:
+- Den Schluessel nirgendwo eintippen, nicht in Chats, nicht in KI-Tools, nicht in die Cloud.
+- Die Transaktion NICHT ueber einen normalen Wallet ins oeffentliche Netz senden. Sie waere
+  dort sofort sichtbar und liesse sich von fremden Bots ersetzen, das ist bei frueheren
+  Puzzles mehrfach passiert. Der Weg geht ueber einen Miner, der sie privat aufnimmt.
+- skripte\pruefe.ps1 rechnet die gefundene Zeile offline nach und zeigt Adresse und WIF.
+
+Viel Spass beim Basteln.

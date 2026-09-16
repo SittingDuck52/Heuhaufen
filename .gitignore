@@ -1,0 +1,14 @@
+# eigene Einstellungen und Laufzeitdateien
+puzzle-config.ps1
+daten/*
+!daten/.gitkeep
+ha-token.txt
+
+# lokal gebautes Suchprogramm (keine Lizenz zur Weitergabe)
+programm/CUDACyclone.exe
+
+# Pakete und Sicherungen
+*.zip
+*.vor-*
+*.bak
+*.tmp

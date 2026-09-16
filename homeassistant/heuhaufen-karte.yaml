@@ -1,0 +1,156 @@
+# Heuhaufen - Beispielkarte fuer ein Home-Assistant-Dashboard (braucht MQTT, siehe LIESMICH.txt)
+#
+# Einfuegen: Dashboard bearbeiten -> Karte hinzufuegen -> ganz unten "Manuell" -> alles ab "type:" einfuegen.
+# "rechnername" ueberall durch den eigenen Rechnernamen in Kleinbuchstaben ersetzen (Sonderzeichen werden zu _),
+# fuer eine zweite Grafikkarte eine Kopie mit "gpu_1". Die genauen Entity-IDs zeigt HA beim Geraet "Heuhaufen ... GPU 0".
+# Die card_mod-Bloecke (Randfarbe, Fortschrittsbalken, Treffer-Kasten) brauchen card-mod aus HACS; sonst loeschen.
+# Grenzen der Anzeigen (Tempo 1000-2000 M/s, Leistung bis 200 W) an die eigene Grafikkarte anpassen.
+# Ist das Dashboard beendet, bleibt nur die Kopfkarte sichtbar.
+type: vertical-stack
+cards:
+  # Treffer: nur sichtbar, wenn eine found*.txt existiert - der Schluessel steht NIE in HA
+  - type: conditional
+    conditions:
+      - condition: state
+        entity: binary_sensor.heuhaufen_rechnername_gpu_0_treffer
+        state: "on"
+    card:
+      type: markdown
+      content: |
+        ## TREFFER
+        **Nichts senden, nichts ins Netz, keine KI.**
+        TREFFER-Notfallplan.md offline befolgen.
+      card_mod:
+        style: |
+          ha-card { background: #7f0000; color: #fff; border: 2px solid #ff5252; }
+
+  # Kopf: Zustand, Share, Tempo, Restzeit, letzte Meldung, Prozent - der Balken kommt per card_mod
+  # (die Markdown-Karte entfernt style-Attribute, darum zeichnet card_mod ihn als ::before/::after unten in die Karte).
+  - type: markdown
+    content: |
+      {% set p = 'heuhaufen_rechnername_gpu_0' %}
+      {% set z = states('sensor.' ~ p ~ '_zustand') %}
+      {% set f = states('sensor.' ~ p ~ '_fortschritt_share') | float(0) %}
+      {% set r = states('sensor.' ~ p ~ '_restzeit_share') %}
+      {% set tage = (r | float(0)) / ({'s': 86400, 'min': 1440, 'h': 24}.get(state_attr('sensor.' ~ p ~ '_restzeit_share', 'unit_of_measurement'), 1)) %}
+      {% set t = states('sensor.' ~ p ~ '_tempo') %}
+      {% set m = states('sensor.' ~ p ~ '_meldung') %}
+      ### Heuhaufen · Puzzle 71 · GPU 0
+      {% set sp = states('sensor.' ~ p ~ '_suchprogramm') %}
+      **{{ z }}** · Share {{ states('sensor.' ~ p ~ '_share') }}{% if sp not in ['unknown', 'unavailable'] %} · {{ sp }}{% endif %}
+
+      {% if t not in ['unknown', 'unavailable'] and r not in ['unknown', 'unavailable'] %}
+      {{ t }} MKey/s · noch {{ '%.1f' | format(tage) }} Tage · fertig etwa {{ (now() + timedelta(days = tage)).strftime('%d.%m. %H:%M') }}
+      {% else %}
+      Dashboard nicht offen
+      {% endif %}
+      {% if m not in ['', 'unknown', 'unavailable'] %}
+      <font color="#9e9e9e">{{ m }}</font>
+      {% endif %}
+
+      **{{ '%.3f' | format(f) }} %** des Shares abgesucht
+    card_mod:
+      style: |
+        {% set f = states('sensor.heuhaufen_rechnername_gpu_0_fortschritt_share') | float(0) %}
+        {% set z = states('sensor.heuhaufen_rechnername_gpu_0_zustand') %}
+        {% if z in ['sucht', 'searching'] %}{% set farbe = 'var(--success-color, #43a047)' %}
+        {% elif z in ['TREFFER', 'HIT'] %}{% set farbe = '#ff5252' %}
+        {% elif z in ['Absturz', 'crashed', 'unavailable', 'unknown'] %}{% set farbe = 'var(--error-color, #db4437)' %}
+        {% elif z in ['beendet', 'ended'] %}{% set farbe = 'var(--disabled-color, #9e9e9e)' %}
+        {% else %}{% set farbe = 'var(--warning-color, #ffa600)' %}
+        {% endif %}
+        ha-card {
+          position: relative;
+          border-left: 6px solid {{ farbe }};
+          padding-bottom: 30px;
+        }
+        ha-card::before {
+          content: "";
+          position: absolute; left: 16px; right: 16px; bottom: 16px; height: 10px;
+          border-radius: 5px;
+          background: rgba(127, 127, 127, 0.25);
+        }
+        ha-card::after {
+          content: "";
+          position: absolute; left: 16px; bottom: 16px; height: 10px;
+          width: calc((100% - 32px) * {{ (f / 100) | round(5) }});
+          border-radius: 5px;
+          background: linear-gradient(90deg, rgba(255, 255, 255, 0.15), {{ farbe }});
+          background-color: {{ farbe }};
+          box-shadow: 0 0 8px {{ farbe }};
+        }
+
+  # Alles Weitere nur, solange das Dashboard offen ist (Tempo nicht "unavailable")
+  - type: conditional
+    conditions:
+      - condition: state
+        entity: sensor.heuhaufen_rechnername_gpu_0_tempo
+        state_not: unavailable
+    card:
+      type: vertical-stack
+      cards:
+        # Anzeigen
+        - type: horizontal-stack
+          cards:
+            - type: gauge
+              entity: sensor.heuhaufen_rechnername_gpu_0_tempo
+              name: Tempo
+              unit: M/s          # "MKey/s" ist fuer die Anzeige zu lang, die Zahl wird sonst winzig
+              min: 1000
+              max: 2000
+              needle: true
+              severity:
+                red: 1000
+                yellow: 1400
+                green: 1600
+            - type: gauge
+              entity: sensor.heuhaufen_rechnername_gpu_0_temperatur
+              name: Temperatur
+              min: 30
+              max: 90
+              needle: true
+              severity:
+                green: 30
+                yellow: 78
+                red: 84
+            - type: gauge
+              entity: sensor.heuhaufen_rechnername_gpu_0_leistung
+              name: Leistung
+              min: 0
+              max: 200
+              needle: true
+              severity:
+                green: 0
+                yellow: 170
+                red: 190
+
+        # Schalter und Werte
+        - type: entities
+          state_color: true
+          entities:
+            - entity: switch.heuhaufen_rechnername_gpu_0_suche
+              name: Suche
+            - entity: switch.heuhaufen_rechnername_gpu_0_auto_pause
+              name: Auto-Pause
+            - entity: switch.heuhaufen_rechnername_gpu_0_webseite
+              name: Webseite
+            - type: divider
+            # nur mit $OllamaApi: - entity: binary_sensor.heuhaufen_rechnername_gpu_0_ollama_rechnet
+            - entity: sensor.heuhaufen_rechnername_gpu_0_lufter
+              name: Lüfter
+            - entity: sensor.heuhaufen_rechnername_gpu_0_auslastung
+              name: Auslastung
+            - entity: sensor.heuhaufen_rechnername_gpu_0_vram_fremd
+              name: VRAM fremd
+            - entity: sensor.heuhaufen_rechnername_gpu_0_energie_sitzung
+              name: Energie seit Start
+
+        # Verlauf (Tempo und Temperatur haben verschiedene Einheiten -> zwei Diagramme untereinander)
+        - type: history-graph
+          title: Verlauf 24 h
+          hours_to_show: 24
+          entities:
+            - entity: sensor.heuhaufen_rechnername_gpu_0_tempo
+              name: Tempo
+            - entity: sensor.heuhaufen_rechnername_gpu_0_temperatur
+              name: Temperatur
