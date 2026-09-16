@@ -1,7 +1,8 @@
 # Heuhaufen 1.23
 
-![Dashboard (Deutsch)](bilder/dashboard-de.png)
-![Dashboard (English)](bilder/dashboard-en.png)
+| Dashboard (Deutsch) | Dashboard (English) |
+| --- | --- |
+| <img src="bilder/dashboard-de.png" alt="Dashboard (Deutsch)" width="380"> | <img src="bilder/dashboard-en.png" alt="Dashboard (English)" width="380"> |
 
 
 Windows dashboard for searching the **Bitcoin puzzle** keys on NVIDIA GPUs, with
@@ -93,6 +94,14 @@ driver version and what the window showed.
 If this was useful to you, or if it really found something:
 
 On-chain: `bc1q63tve4ch6lfffavfr20nqf2vct4taac3r68enm`
+
+
+<details>
+<summary>QR code for the Bitcoin address</summary>
+
+<img src="bilder/btc-qr.png" alt="Bitcoin QR code for bc1q63tve4ch6lfffavfr20nqf2vct4taac3r68enm" width="220">
+
+</details>
 
 Lightning (small tips): `heuhaufen@strike.me`
 
