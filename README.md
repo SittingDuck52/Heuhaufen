@@ -8,6 +8,7 @@
 Windows dashboard for searching the **Bitcoin puzzle** keys on NVIDIA GPUs, with
 [BitCrack](https://github.com/brichard19/BitCrack) or [CUDACyclone](https://github.com/Dookoo2/CUDACyclone).
 PowerShell only - no installation, no service, nothing is sent anywhere.
+*Heuhaufen* is German for **haystack** - the place you search when you are looking for a needle.
 
 > **Scope:** the search only runs inside the ranges of the public puzzle transaction from 2015.
 > It is not a tool for other people's wallets, and it is not meant to be one.
