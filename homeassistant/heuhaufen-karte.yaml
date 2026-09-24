@@ -134,6 +134,8 @@ cards:
               name: Auto-Pause
             - entity: switch.heuhaufen_rechnername_gpu_0_webseite
               name: Webseite
+            - entity: number.heuhaufen_rechnername_gpu_0_power_limit
+              name: Power-Limit
             - type: divider
             # nur mit $OllamaApi: - entity: binary_sensor.heuhaufen_rechnername_gpu_0_ollama_rechnet
             - entity: sensor.heuhaufen_rechnername_gpu_0_lufter

@@ -19,6 +19,16 @@ ersetzen die Transaktion per Replace-by-Fee durch ihre eigene.
 - **Puzzle 66 (2024) und 69 (2025):** öffentlich gesendet → Prämie von Bots gestohlen.
 - **Puzzle 67 und 68 (2025):** am öffentlichen Mempool vorbei direkt an einen Miner übergeben → Prämie erhalten.
 
+**Muss RBF (Replace-by-Fee) in der Wallet abgeschaltet werden?** Nein – nicht auf diesem Weg. Anleitungen
+im Netz (z. B. btcpuzzle.info) raten dazu und empfehlen dafür die alte Electrum-Version 4.3.4, weil neuere
+den Schalter nicht mehr haben. Das hilft nur in einem Fall, den dieser Plan ohnehin ausschließt: wenn die
+Transaktion im öffentlichen Mempool landet. Geht sie direkt an den Miner, sieht sie kein Bot, und im Block
+ist sie endgültig. Dazu kommt: Seit Bitcoin Core 28 (Ende 2024) ist „full RBF“ standardmäßig aktiv, Knoten
+ersetzen also unabhängig von diesem Flag – und wer den Public Key hat, hat den Schlüssel und braucht kein
+RBF, um eine konkurrierende Transaktion zu bauen. Eine über zwei Jahre alte Wallet mit ungepatchten Lücken
+dafür einzusetzen, wäre das größere Risiko. **Also: aktuelle Electrum-Version von electrum.org nehmen und
+einfach nicht senden.**
+
 ---
 
 ## 1. Sofort – die ersten Minuten
@@ -70,18 +80,48 @@ ersetzen die Transaktion per Replace-by-Fee durch ihre eigene.
 
 ## 4. Transaktion bauen und signieren – ohne zu senden
 
-Werkzeug: **Electrum** (nur von <https://electrum.org>). Menünamen können je nach Version abweichen.
+Werkzeug: **Electrum** (nur von <https://electrum.org>). Menünamen ändern sich zwischen den Versionen –
+die Angaben hier sind mit **4.8.2** geprüft (18.09.2026). Findest du einen Punkt nicht, such nach dem, was
+der Beschreibung entspricht, nicht nach dem genauen Wortlaut.
 
 ### 4a. Unsignierte Transaktion (Wallet ohne Schlüssel, online)
 
 1. Electrum starten → neue Wallet → Typ **„Bitcoin-Adressen oder private Schlüssel importieren“**
 2. **Nur die Adresse** `1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU` einfügen → Watch-only-Wallet,
    das Guthaben wird angezeigt.
-3. Senden an die eigene Adresse aus Schritt 3, Betrag **„Max“**.
-4. **Gebühr großzügig** wählen (deutlich über der aktuellen Empfehlung von mempool.space) –
-   gegenüber 7,1 BTC fällt sie kaum ins Gewicht und erhöht die Chance auf schnelle Aufnahme.
-5. **Nicht** „Senden/Broadcast“ – stattdessen **Vorschau/Erweitert → Exportieren → In Datei
-   speichern** (unsignierte Transaktion / PSBT).
+
+   **Diese Wallet ist nicht nur zum Anschauen da: Sie baut die Transaktion.** Sie kennt die Beträge
+   auf der Adresse und die aktuellen Gebühren und setzt daraus die vollständige Transaktion zusammen –
+   nur unterschreiben kann sie nicht, dafür fehlt ihr der Schlüssel. Genau so ist es gewollt: Der
+   Rechner am Netz sieht den Schlüssel nie, der Rechner mit dem Schlüssel geht nie ans Netz.
+   Nach dem Export in Schritt 5 wird sie nicht mehr gebraucht (sie enthält keinen Schlüssel und ist
+   ungefährlich; man kann mit ihr später sehen, ob die Zahlung angekommen ist).
+3. **Empfänger** ist die eigene Adresse aus Schritt 3. Beim **Betrag** den Knopf **„Max“** neben dem
+   Betragsfeld drücken – die Adresse wird komplett geleert, es gibt also kein Wechselgeld.
+   (**„Max“ meint hier den Betrag, nicht die Gebühr.**) Dann auf **„Bezahlen“** klicken – es öffnet
+   sich ein **zweites Fenster**; gesendet wird dabei noch nichts.
+4. **Erst in diesem Fenster wird die Gebühr eingestellt.** Electrum bietet drei Reiter an – *Restzeit*,
+   *Gebührenrate* und *Mempool*. Nimm **Gebührenrate** (sat/vByte): Die beiden anderen sind Schätzungen,
+   die sich mit dem Mempool ändern, nur hier weißt du genau, was gesetzt wird. Auf
+   <https://mempool.space> die aktuelle Rate für „High Priority“ ansehen und das **Zwei- bis
+   Dreifache** eintragen – den Regler ruhig bis zum Maximum ziehen. Die Transaktion hat einen Eingang
+   und einen Ausgang (rund 190 vByte), bei 250 sat/vByte sind das etwa 47.500 Satoshi – gegenüber
+   7,1 BTC ein halbes Promille. Die Gebühr steht mit dem Export fest; sie später zu ändern heißt,
+   4a und 4b zu wiederholen.
+
+   **Warum so hoch, wo Slipstream doch wenig verlangt?** Slipstream nennt (Stand 18.09.2026) eine
+   Mindestrate von **1 sat/vByte**, „current minable rate“ 2 sat/vByte – dort konkurriert die
+   Transaktion nicht im Mempool, MARA nimmt sie direkt in einen Block. Die hohe Gebühr ist die
+   **Versicherung für den Fall, dass sie doch öffentlich wird**: wenn Slipstream ausfällt, ablehnt
+   oder man am Ende doch senden muss. Dann entscheidet die Rate über die Überlebenszeit im Mempool.
+   Mit 250 sat/vByte ist sie im nächsten Block, mit 2 sat/vByte liegt sie sichtbar herum, bis ein Bot
+   sie überbietet – genau das hat Puzzle 66 und 69 gekostet. Rund 45 € von 7,1 BTC sind dafür der
+   billigste Schutz im ganzen Vorgang.
+5. Im selben Fenster auf **„Vorschau“**, dann **links unten auf „Teilen“** → **„In Datei speichern“**.
+   Das ergibt die unsignierte Transaktion (PSBT). **Nicht** „Senden/Broadcast“ drücken.
+   *Ablauf und Namen sind mit Electrum 4.8.2 geprüft (18.09.2026); in älteren Fassungen hieß der Weg
+   „Vorschau/Erweitert → Exportieren“. In der nächsten Version kann es wieder anders heißen – such
+   dann nach dem Punkt, der der Beschreibung entspricht.*
 
 ### 4b. Signieren (Wallet mit Schlüssel, offline)
 
@@ -97,6 +137,11 @@ Werkzeug: **Electrum** (nur von <https://electrum.org>). Menünamen können je n
 4. Kontrollieren: **Empfänger = eigene Adresse**, Betrag und Gebühr plausibel.
 5. **Signieren** → **Exportieren** als **Hex** (in Datei speichern oder kopieren).
    **Nicht** „Senden“ drücken.
+
+   **Achtung, Unterschied zu 4a:** Die unsignierte Datei aus 4a enthält den Public Key noch nicht und
+   ist harmlos. Diese **signierte** Datei enthält ihn – und damit ist sie für jeden mit Kangaroo so gut
+   wie der private Schlüssel. Sie geht nur an Slipstream: kein Block-Explorer, kein Forum, keine Cloud,
+   kein Chat, kein KI-Werkzeug.
 6. Electrum schließen.
 
 ---

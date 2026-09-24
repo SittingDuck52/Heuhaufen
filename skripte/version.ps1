@@ -3,4 +3,4 @@
 # Wird nur auf Ansage hochgezaehlt.
 # Der Ordner heisst seit 14.09.2026 ebenfalls Heuhaufen (vorher BitCrack).
 $AppName    = 'Heuhaufen'
-$AppVersion = '1.23'
+$AppVersion = '1.24'

@@ -7,6 +7,7 @@ param(
 )
 
 # ================= Standard-Einstellungen =================
+$LimitSchritt = 5                     # Watt je Tastendruck (+ / -) und Schritt des Reglers in Home Assistant
 $PowerLimit  = 0                      # Watt pro Karte, 0 = Einstellung der Karte nicht anfassen (Standard seit 16.09.2026;
                                       # vorher 150 - auf fremder Hardware ohne Config unerwartet)
 $Tuning      = '-b 32 -t 256 -p 512'
@@ -36,6 +37,7 @@ $OllamaKeepAlive = ''                 # z. B. '1m': so lange hält Ollama ein Mo
 # pausiert wird erst, wenn Ollama wirklich rechnet.
 $OllamaApi     = ''                   # z. B. 'http://localhost:11434'; leer = nicht abfragen
 $OllamaIdleSec = 30                   # so lange muss Ollama ruhig sein, bevor die Suche weiterläuft
+$OllamaGpu     = -1                   # Karte, auf der Ollama rechnet (CUDA_VISIBLE_DEVICES); -1 = unbekannt, dann pausieren alle
 $WebPort       = 0                    # Port der Webseite (web.ps1), 0 = keine Webseite starten
 $WebBind       = '+'                  # '+' = im Netz erreichbar, 'localhost' = nur dieser Rechner
 $StartWartet   = $false               # $true: Fenster öffnet sich, sucht aber erst auf Knopfdruck
@@ -279,6 +281,7 @@ $minPl     = [int][double]::Parse($plq[1].Trim(), $inv)
 $maxPl     = [int][double]::Parse($plq[2].Trim(), $inv)
 $usePl = 0
 if ($PowerLimit -gt 0) { $usePl = [math]::Max($minPl, [math]::Min($maxPl, [int]$PowerLimit)) }
+$limitHand = 0                        # von Hand gesetztes Limit dieser Sitzung (0 = keines)
 
 # Schutz: BitCrack wird beim Schliessen des Fensters mitbeendet, Power-Limit zurueckgesetzt
 if (-not ('P71.Guard' -as [type])) {
@@ -333,6 +336,9 @@ public static class Guard {
         handler = new CtrlHandler(OnCtrl);
         SetConsoleCtrlHandler(handler, true);
     }
+    // Rueckstellwert nachreichen: wer das Limit erst im Betrieb setzt (Taste + / -, Webseite, Home Assistant),
+    // braucht den Pfad zum Zuruecksetzen auch dann, wenn die Config gar kein Limit vorsah.
+    public static void SetReset(string reset) { resetArgs = reset; }
     public static bool Attach(Process p) { child = p; return AssignProcessToJobObject(job, p.Handle); }
     static bool OnCtrl(int type) {
         if (type == 2 || type == 5 || type == 6) {   // Fenster schliessen, Abmelden, Herunterfahren
@@ -710,6 +716,23 @@ function Col([double]$v, [double]$warn, [double]$crit) { if ($v -ge $crit) { 'Re
 # Wartet bis zu $sec Sekunden und bricht bei einem Tastendruck sofort ab.
 # Rueckgabe: Name der Taste ('P', 'W', ...) oder '' wenn nichts gedrueckt wurde.
 # Knopfdruck auf der Webseite: eine Datei mit einem Wort. Wird gelesen, geloescht und wie eine Taste behandelt.
+# Power-Limit im laufenden Betrieb aendern: Tasten + und -, Schieberegler in Home Assistant, Webseite.
+# In der Pause steht die Karte auf ihrem Standardlimit - dann wird der Wunsch nur gemerkt und beim
+# Fortsetzen gesetzt (Resume-BC nimmt $usePl). Zurueckgesetzt wird am Ende immer auf $defaultPl.
+function Set-Limit([int]$w) {
+    if ($minPl -le 0 -or $maxPl -le $minPl) { return (T 'dash.status.limitGeht') }
+    $w = [int][math]::Max($minPl, [math]::Min($maxPl, $w))
+    if ($w -eq $script:usePl) { return '' }
+    if (-not $script:paused) {
+        & $smi -i $dev -pl $w 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { return (T 'dash.status.limitFehler' $w) }
+    }
+    $script:usePl = $w
+    $script:limitHand = $w
+    [P71.Guard]::SetReset("-i $dev -pl $defaultPl")
+    Save-Merken
+    T 'dash.status.limitNeu' $w
+}
 function Read-Befehl {
     if ($script:mqtt) { $mb = Read-MqttBefehl; if ($mb) { return $mb } }   # Befehl von Home Assistant
     if ($script:tray) { $tb = Read-TrayBefehl; if ($tb) { return $tb } }   # Klick im Tray-Menü
@@ -723,6 +746,7 @@ function Read-Befehl {
         'weiter' { if ($script:paused) { return 'P' } }
         'start'  { if ($script:paused) { return 'P' } }
         'auto'   { return 'V' }
+        default  { if ($t -match '^pl_(\d{2,4})$') { return ('PL' + $Matches[1]) } }
     }
     ''
 }
@@ -745,6 +769,8 @@ function Wait-Key([double]$sec) {
                 if ([Console]::KeyAvailable) {
                     $k = [Console]::ReadKey($true)
                     if ($k.KeyChar -eq [char]3 -or ($k.Key -eq 'C' -and ($k.Modifiers -band [ConsoleModifiers]::Control))) { return 'CtrlC' }
+                    if ($k.KeyChar -eq '+') { return 'Plus' }
+                    if ($k.KeyChar -eq '-') { return 'Minus' }
                     return "$($k.Key)"
                 }
             }
@@ -956,7 +982,7 @@ function Suspend-BC([string]$grund) {
     $script:pauseWhy  = $grund
     $script:vramHi = 0; $script:vramLo = 0
     # Nach dem Beenden faellt der Speicher um den Eigenbedarf von BitCrack - gute Gelegenheit zum Messen
-    $script:vramPre = $script:vramNow; $script:vramDir = -1.0; $script:ollMbPre = $script:ollMb; $script:vramAt = $script:pauseAt.AddSeconds(12)
+    $script:vramPre = $script:vramNow; $script:vramDir = -1.0; $script:ollMbPre = $script:ollMb; $script:vramAt = $script:pauseAt.AddSeconds(12); $script:vramAt2 = $null
     # Marke fuer solar.ps1, damit die Pause nicht als Absturz gilt
     Set-Content -Encoding ascii -Path (Join-Path $Daten $fPause) -Value @($script:pauseAt.ToString('yyyy-MM-dd HH:mm:ss'), $grund)
     # Nur eine Pause von Hand wird gemerkt; Auto-Pausen setzen von selbst fort, gewollt bleibt "suchen"
@@ -966,7 +992,7 @@ function Suspend-BC([string]$grund) {
 # Weiter: Power-Limit wieder setzen, BitCrack aus dem Checkpoint fortsetzen
 function Resume-BC {
     if ($usePl -gt 0) { & $smi -i $dev -pl $usePl | Out-Null }
-    $script:vramPre = $script:vramNow; $script:vramDir = 1.0; $script:ollMbPre = $script:ollMb; $script:vramAt = (Get-Date).AddSeconds(12)
+    $script:vramPre = $script:vramNow; $script:vramDir = 1.0; $script:ollMbPre = $script:ollMb; $script:vramAt = (Get-Date).AddSeconds(12); $script:vramAt2 = (Get-Date).AddSeconds(45)
     $script:proc = Start-BC $share $range
     [void][P71.Guard]::Attach($script:proc)
     Remove-Item (Join-Path $Daten $fPause) -ErrorAction SilentlyContinue
@@ -1009,6 +1035,10 @@ function Write-Status([string]$zustand) {
         motor = $motor; block = $(if ($cyc -and $blk) { $blk.Bits } else { $null })
         karte = $(if ($gpu) { $gpu.Name } else { '' }); profil = $(if ($profileName) { $profileName } else { 'Standard' })
         watt = $(if ($gpu) { $gpu.Power } else { 0 }); limit = $(if ($gpu) { $gpu.Limit } else { 0 })
+        # limit ist der Istwert der Karte (in der Pause ihr Standardlimit), limitSoll der eingestellte Wunsch -
+        # danach richtet sich der Schieberegler in Home Assistant, sonst springt er bei jeder Pause.
+        limitSoll = $(if ($script:usePl -gt 0) { [int]$script:usePl } elseif ($gpu) { [int]$gpu.Limit } else { 0 })
+        limitMin = [int]$minPl; limitMax = [int]$maxPl; limitSchritt = [int]$LimitSchritt   # Grenzen der Karte fuer den Regler auf der Webseite
         grad = $(if ($gpu) { $gpu.Temp } else { 0 }); luefter = $(if ($gpu) { [double]$gpu.Fan } else { 0 })
         last = $(if ($gpu) { $gpu.Util } else { 0 })
         vram = $(if ($gpu) { $gpu.MemUsed } else { 0 }); vramGesamt = $(if ($gpu) { $gpu.MemTotal } else { 0 })
@@ -1180,6 +1210,11 @@ $pauseAt = $null
 $skipSpd = $false                     # ersten Checkpoint nach dem Fortsetzen nicht fürs Tempo nutzen
 $autoPause = $false                   # diese Pause hat die Automatik ausgelöst (nur dann startet sie wieder)
 $pauseWhy  = ''                       # Grund der Pause: 'hand', 'vram' oder 'ollama'
+# Liegt Ollama fest auf einer Karte, geht die andere es nichts an: sie pausiert nicht und rechnet
+# Ollamas Speicher auch nicht heraus (er liegt ja nicht auf ihr). Ollamas Schnittstelle meldet den
+# Speicher nicht pro Karte, deshalb muss die Karte in der Config stehen.
+$ollMeine  = ($OllamaGpu -lt 0) -or ([int]$OllamaGpu -eq [int]$dev)
+$ollGeteiltVor = $false               # Merker, damit der Hinweis nur beim Wechsel kommt
 $ollMb     = 0.0                      # Grafikspeicher, den Ollama gerade belegt
 $ollMbPre  = 0.0                      # derselbe Wert beim letzten Start/Stopp von BitCrack
 $ollRest   = @{}                      # Restzeit je geladenem Modell aus der vorigen Abfrage
@@ -1200,12 +1235,22 @@ function Save-Merken {
         # Was hier gerade nicht schaltbar ist ($WebPort = 0, keine Automatik), bleibt wie zuletzt gemerkt
         $web  = if ($WebPort -gt 0) { [bool]$script:webAn } elseif ($alt -and $null -ne $alt.web) { [bool]$alt.web } else { $true }
         $auto = if ($VramPauseMB -gt 0 -or $OllamaApi) { [bool]$script:vramAuto -or [bool]$script:vramSperre } elseif ($alt -and $null -ne $alt.automatik) { [bool]$alt.automatik } else { $true }
-        $o = [ordered]@{ web = $web; automatik = $auto; suche = [bool]$script:sucheGewollt; zeit = (Get-Date).ToString('s') }
+        # Ein von Hand gesetztes Limit wird gemerkt und hat beim naechsten Start Vorrang vor der Config;
+        # 0 heisst "nie verstellt". Datei loeschen stellt wieder den Config-Wert her.
+        $lim = if ($script:limitHand -gt 0) { [int]$script:limitHand } elseif ($alt -and $null -ne $alt.limit) { [int]$alt.limit } else { 0 }
+        $o = [ordered]@{ web = $web; automatik = $auto; suche = [bool]$script:sucheGewollt; limit = $lim; zeit = (Get-Date).ToString('s') }
         [IO.File]::WriteAllText("$p.tmp", ($o | ConvertTo-Json -Compress))
         Move-Item "$p.tmp" $p -Force
     } catch { }
 }
 $merk = Read-Merken
+# Ein von Hand gesetztes Limit hat Vorrang vor der Config - wie Webseite und Auto-Pause (Abschnitt 17o).
+# Das Zuruecksetzen am Ende muss dann auch greifen, wenn die Config gar kein Limit vorsah.
+if ($merk -and $null -ne $merk.limit -and [int]$merk.limit -gt 0) {
+    $usePl = [math]::Max($minPl, [math]::Min($maxPl, [int]$merk.limit))
+    $limitHand = $usePl
+    [P71.Guard]::SetReset("-i $dev -pl $defaultPl")
+}
 $wartetVorgabe = if ($merk -and $null -ne $merk.suche) { -not [bool]$merk.suche } else { $StartWartet }
 $wartet    = ($wartetVorgabe -and -not $Sofort)   # erst auf Knopfdruck suchen (gemerkt: beim letzten Schließen pausiert)
 $sucheGewollt = -not $wartet                      # wird gemerkt: sucht beim nächsten Öffnen sofort weiter
@@ -1231,6 +1276,7 @@ $vramNow   = 0.0                      # aktuell belegter Grafikspeicher
 $vramPre   = 0.0                      # Wert vor dem letzten Start/Stopp von BitCrack
 $vramDir   = 0.0                      # erwartete Richtung der Änderung: +1 nach Start, −1 nach Stopp
 $vramAt    = $null                    # Zeitpunkt, ab dem der Vergleich sinnvoll ist
+$vramAt2   = $null                    # zweiter Blick 45 s nach dem Start: der Eigenbedarf kann zu klein gemessen worden sein
 $vramHi    = 0                        # Messungen über der Pausenschwelle
 $vramLo    = 0                        # Messungen unter der Rückkehrschwelle
 $vramSperre = ''                      # Speicherregel für diese Sitzung aus: 'start' oder 'pendel' (Set-VramSperre)
@@ -1322,7 +1368,7 @@ try {
     } else {
         # Belegung vor dem Start merken: der Zuwachs ist der Eigenbedarf von BitCrack
         if ($StartWartet -and -not $Sofort) { $status = (T 'dash.status.suchtGemerkt') }
-        $vramNow = Get-VramUsed; $vramPre = $vramNow; $vramDir = 1.0; $vramAt = (Get-Date).AddSeconds(12)
+        $vramNow = Get-VramUsed; $vramPre = $vramNow; $vramDir = 1.0; $vramAt = (Get-Date).AddSeconds(12); $vramAt2 = (Get-Date).AddSeconds(45)
         $proc = Start-BC $share $range
         [void][P71.Guard]::Attach($proc)
     }
@@ -1433,6 +1479,14 @@ try {
             elseif (($now - $ollActiveAt).TotalSeconds -ge $OllamaIdleSec) { $ollArmed = $true }
         }
 
+        # Ollamas Speicher passt nicht auf eine Karte? Dann liegt das Modell verteilt (llama.cpp legt die
+        # Schichten auf mehrere GPUs), und $OllamaGpu waere eine falsche Annahme - dann pausieren wieder alle.
+        $ollGeteilt = ($ollMb -gt 0) -and $gpu -and ($gpu.MemTotal -gt 0) -and ($ollMb -gt $gpu.MemTotal * 0.9)
+        $ollHier = $ollMeine -or $ollGeteilt
+        if ($ollGeteilt -ne $ollGeteiltVor) {
+            if ($ollGeteilt -and -not $ollMeine) { $status = T 'dash.status.ollamaGeteilt' }
+            $ollGeteiltVor = $ollGeteilt
+        }
         # --- VRAM-Automatik: pausieren, wenn andere Programme die Karte brauchen ---
         if ($gpu) { $vramNow = $gpu.MemUsed }
         if ($vramAt -and $now -ge $vramAt) {
@@ -1443,10 +1497,21 @@ try {
             }
             $vramAt = $null
         }
+        # Zweiter Blick: die Messung nach 12 s faellt zu klein aus, wenn das Suchprogramm seinen Speicher
+        # noch nicht ganz geholt hat (einmal 1.059 statt 2.740 MB gemessen - "fremd" war dadurch 2.353 MB
+        # statt 655). Der Eigenbedarf kann nur wachsen, also wird ein groesserer Wert uebernommen. Die
+        # Automatik wartet darauf nicht, sie entscheidet ab der ersten Messung weiter.
+        if ($vramAt2 -and $now -ge $vramAt2) {
+            if ($VramSelfMB -le 0 -and -not $paused -and $vramDir -gt 0 -and [math]::Abs($ollMb - $ollMbPre) -lt 50.0) {
+                $d = $vramNow - $vramPre
+                if ($d -gt $vramSelf -and $d -le 8000) { $vramSelf = $d }
+            }
+            $vramAt2 = $null
+        }
         # Belegung ohne BitCrack und ohne Ollama: in der Pause ist der ganze Rest fremd,
         # sonst der Anteil ueber dem Eigenbedarf. Ollamas Modelle zaehlen nicht mit, um die kuemmert
         # sich die Abfrage oben - ein geparktes Modell soll die Suche nicht anhalten.
-        $vramOther = [math]::Max(0.0, [double]$vramNow - $(if ($paused) { 0.0 } else { [double]$vramSelf }) - [double]$ollMb)
+        $vramOther = [math]::Max(0.0, [double]$vramNow - $(if ($paused) { 0.0 } else { [double]$vramSelf }) - $(if ($ollHier) { [double]$ollMb } else { 0.0 }))
         # Startprüfung, einmal: sobald der Eigenbedarf gemessen ist (im Wartemodus sofort). Belegen Desktop und andere
         # Programme schon mehr als die Schwelle, bliebe die Suche sonst unerklärlich dauerhaft stehen.
         if ($vramStartPruefung -and $gpu -and -not $vramAt) {
@@ -1458,10 +1523,10 @@ try {
         }
         if ($vramAuto -and $gpu -and -not $vramAt) {
             if ($vramOther -lt $VramResumeMB) { $vramArmed = $true }
-            $ollRuhig = (-not $OllamaApi) -or ((-not $ollActive) -and (($now - $ollActiveAt).TotalSeconds -ge $OllamaIdleSec))
+            $ollRuhig = (-not $OllamaApi) -or (-not $ollHier) -or ((-not $ollActive) -and (($now - $ollActiveAt).TotalSeconds -ge $OllamaIdleSec))
             if (-not $paused) {
                 if ($VramPauseMB -gt 0 -and -not $vramSperre -and $vramOther -ge $VramPauseMB) { $vramHi++ } else { $vramHi = 0 }
-                if ($ollActive -and $ollArmed) {
+                if ($ollActive -and $ollArmed -and $ollHier) {
                     Suspend-BC 'ollama'
                     $status = T 'dash.status.autoPauseOllama' $pauseAt
                 } elseif ($vramArmed -and $VramPauseMB -gt 0 -and ($vramHi * $RefreshSec) -ge $VramHoldSec) {
@@ -1739,6 +1804,12 @@ try {
                 Suspend-BC 'hand'
                 $status = T 'dash.status.pauseAb' $pauseAt
             }
+        } elseif ($key -eq 'Plus' -or $key -eq 'Minus') {
+            $s = Set-Limit ($usePl + $(if ($key -eq 'Plus') { $LimitSchritt } else { -$LimitSchritt }))
+            if ($s) { $status = $s }
+        } elseif ($key -like 'PL??*') {
+            $s = Set-Limit ([int]$key.Substring(2))
+            if ($s) { $status = $s }
         } elseif ($key -eq 'W' -and $WebPort -gt 0) {
             $webAn = -not $webAn; Save-Merken
             if ($webAn) {

@@ -19,6 +19,15 @@ replace the transaction with their own via replace-by-fee.
 - **Puzzle 66 (2024) and 69 (2025):** broadcast publicly → reward stolen by bots.
 - **Puzzle 67 and 68 (2025):** handed directly to a miner, bypassing the public mempool → reward received.
 
+**Do I have to switch off RBF (replace-by-fee) in the wallet?** No – not on this route. Guides on the web
+(btcpuzzle.info for one) recommend it and suggest the old Electrum 4.3.4, because newer versions no longer
+offer the switch. It only helps in a case this plan rules out anyway: the transaction reaching the public
+mempool. Handed straight to a miner it is never seen by a bot, and once in a block it is final. On top of
+that, Bitcoin Core 28 (late 2024) turned on "full RBF" by default, so nodes replace transactions regardless
+of the flag – and whoever has the public key has the key itself and needs no RBF to build a competing
+transaction. Using a wallet version over two years old, with unpatched holes, would be the bigger risk.
+**So: take the current Electrum from electrum.org and simply do not broadcast.**
+
 ---
 
 ## 1. Immediately – the first minutes
@@ -77,11 +86,36 @@ Tool: **Electrum** (only from <https://electrum.org>). Menu names may differ bet
 1. Start Electrum → new wallet → type **"Import Bitcoin addresses or private keys"**
 2. Paste **only the address** `1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU` → watch-only wallet,
    the balance is shown.
-3. Send to your own address from step 3, amount **"Max"**.
-4. Choose a **generous fee** (well above the current recommendation on mempool.space) –
-   compared with 7.1 BTC it hardly matters and it raises the chance of quick inclusion.
-5. Do **not** press "Send/Broadcast" – instead **Preview/Advanced → Export → Save to
-   file** (unsigned transaction / PSBT).
+
+   **This wallet is not just for looking: it builds the transaction.** It knows the amounts sitting on
+   the address and the current fees, and assembles the complete transaction from them – it just cannot
+   sign it, because it has no key. That is the whole point: the machine on the network never sees the
+   key, the machine with the key never goes online. After the export in step 5 it is no longer needed
+   (it holds no key and is harmless; you can use it later to see whether the payment arrived).
+3. The **recipient** is your own address from step 3. For the **amount** press the **"Max"** button
+   next to the amount field – the address is emptied completely, so there is no change output.
+   (**"Max" refers to the amount here, not to the fee.**) Then click **"Pay"** – a **second window**
+   opens; nothing is sent yet.
+4. **The fee is set in that window, not before.** Electrum offers three tabs – *ETA*, *Fee rate* and
+   *Mempool*. Use **Fee rate** (sat/vByte): the other two are estimates that move with the mempool,
+   this is the only one where you know exactly what is set. Look up the current "High Priority" rate
+   on <https://mempool.space> and enter **two to three times** that – pulling the slider to its
+   maximum is fine. The transaction has one input and one output (about 190 vBytes), so at
+   250 sat/vByte it costs roughly 47,500 satoshi – half a per mille of 7.1 BTC. The fee is fixed once
+   you export; changing it later means redoing 4a and 4b.
+
+   **Why so high when Slipstream asks for so little?** Slipstream states (as of 18.09.2026) a minimum
+   submission rate of **1 sat/vByte**, current minable rate 2 sat/vByte – there the transaction does
+   not compete in the mempool, MARA puts it straight into a block. The high fee is the **insurance for
+   the case it becomes public after all**: if Slipstream is down, refuses it, or you end up having to
+   broadcast. Then the rate decides how long it survives in the mempool. At 250 sat/vByte it is in the
+   next block; at 2 sat/vByte it sits there in plain sight until a bot outbids it – exactly what cost
+   puzzles 66 and 69. About 45 EUR out of 7.1 BTC is the cheapest protection in the whole procedure.
+5. In the same window click **"Preview"**, then **"Share" at the bottom left** → **"Save to file"**.
+   That gives you the unsigned transaction (PSBT). Do **not** press "Send/Broadcast".
+   *Steps and names checked with Electrum 4.8.2 (18.09.2026); older versions called it
+   "Preview/Advanced → Export". The next version may rename it again – then look for the item that
+   matches the description.*
 
 ### 4b. Sign (wallet with the key, offline)
 
@@ -97,6 +131,11 @@ Tool: **Electrum** (only from <https://electrum.org>). Menu names may differ bet
 4. Check: **recipient = your own address**, amount and fee plausible.
 5. **Sign** → **Export** as **hex** (save to a file or copy).
    Do **not** press "Send".
+
+   **Note the difference to 4a:** the unsigned file from 4a does not contain the public key yet and is
+   harmless. This **signed** file does – which makes it, for anyone with Kangaroo, as good as the
+   private key itself. It goes to Slipstream and nowhere else: no block explorer, no forum, no cloud,
+   no chat, no AI tool.
 6. Close Electrum.
 
 ---

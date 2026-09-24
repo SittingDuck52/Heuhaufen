@@ -38,6 +38,8 @@ $VramBackSec  = 60           # so lange muss er frei sein, bevor es weitergeht
 # Pausiert, sobald Ollama rechnet; ein geparktes Modell darf liegen bleiben.
 # $OllamaApi     = 'http://localhost:11434'
 $OllamaIdleSec = 30          # so lange muss Ollama ruhig sein, bevor die Suche weiterlaeuft
+# $OllamaGpu     = 0          # nur bei mehreren Karten: die Karte, auf der Ollama rechnet. Dann pausiert
+#                             # nur sie. Ollama muss dafuer festgelegt sein (CUDA_VISIBLE_DEVICES).
 
 # ---- Webseite im eigenen Netz ----
 $WebPort = 8080              # Webseite http://<rechnername>:8080/ mit allen Karten, auch von einem anderen

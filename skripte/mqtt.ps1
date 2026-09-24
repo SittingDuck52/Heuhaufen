@@ -247,6 +247,13 @@ function Get-MqttDiscovery([string]$knoten) {
         @{ a = 'switch'; id = 'suche'; name = (T 'mqtt.name.suche'); tpl = "{{ 'ON' if value_json.zustand == 'laeuft' else 'OFF' }}"; on = 'suche_an'; off = 'suche_aus'; icon = 'mdi:magnify' }
         # bis 15.09.2026 gab es statt des Schalters zwei Knoepfe (button pause/weiter) - Start-Mqtt loescht sie in HA
     )
+    # Schieberegler fuer das Power-Limit - Grenzen kommen von der Karte, Schrittweite aus $LimitSchritt.
+    # Nur anbieten, wenn die Karte das Verstellen ueberhaupt zulaesst.
+    if ($minPl -gt 0 -and $maxPl -gt $minPl) {
+        $liste += @{ a = 'number'; id = 'limit'; name = (T 'mqtt.name.limit'); tpl = '{{ value_json.limitSoll }}'
+                     cmdTpl = 'pl_{{ value | int }}'; min = [int]$minPl; max = [int]$maxPl; step = [int]$LimitSchritt
+                     unit = 'W'; icon = 'mdi:speedometer'; cat = 'config' }
+    }
     if ($VramPauseMB -gt 0 -or $OllamaApi) {
         $liste += @{ a = 'switch'; id = 'automatik'; name = (T 'mqtt.name.automatik'); tpl = "{{ 'ON' if value_json.automatik else 'OFF' }}"; on = 'auto_an'; off = 'auto_aus'; icon = 'mdi:robot' }
     }
@@ -264,6 +271,7 @@ function Get-MqttDiscovery([string]$knoten) {
         } else {
             $c.state_topic = $script:mqState; $c.value_template = $x.tpl
             if ($x.a -eq 'switch') { $c.command_topic = $script:mqSet; $c.payload_on = $x.on; $c.payload_off = $x.off; $c.state_on = 'ON'; $c.state_off = 'OFF' }
+            if ($x.a -eq 'number') { $c.command_topic = $script:mqSet; $c.command_template = $x.cmdTpl; $c.min = $x.min; $c.max = $x.max; $c.step = $x.step; $c.mode = 'slider' }
         }
         if ($x.unit) { $c.unit_of_measurement = $x.unit }
         if ($x.dc)   { $c.device_class = $x.dc }
@@ -379,6 +387,7 @@ function Read-MqttBefehl {
             'web_aus'  { if ($script:webAn) { return 'W' } }
             'auto_an'  { if (-not $script:vramAuto) { return 'V' } }
             'auto_aus' { if ($script:vramAuto) { return 'V' } }
+            default    { if ("$($e[1])".Trim() -match '^pl_(\d{2,4})$') { return ('PL' + $Matches[1]) } }
         }
     }
     ''

@@ -1,4 +1,4 @@
-Heuhaufen 1.23 - Searching for the key of a Bitcoin puzzle
+Heuhaufen 1.24 - Searching for the key of a Bitcoin puzzle
 ==========================================================
 
 What this is about
@@ -99,6 +99,9 @@ Keys
       If StartWartet is $true in the configuration, P starts the search in the first place.
   V   Automatic pause on/off (see "Automatic pause").
   W   Web page on/off (only if WebPort is set).
+  + -  Raise or lower the power limit by 5 W, effective at once. The value is remembered and
+      takes precedence over the configuration on the next start (LimitSchritt changes the
+      step). Home Assistant gets a slider for it.
   Ctrl+C asks first: Y quits, N (or 30 s without input) keeps searching.
 
 Automatic pause
@@ -115,12 +118,18 @@ higher, e.g. 3000.
 If Ollama runs on the same computer, the dashboard can ask it directly ($OllamaApi in
 puzzle-config.ps1). The search then pauses as soon as Ollama works, and a parked model does not
 matter.
+With several cards all of them pause while Ollama computes - its interface does not say which card
+holds the model. If you pin Ollama to one card (set the environment variables
+CUDA_DEVICE_ORDER=PCI_BUS_ID and CUDA_VISIBLE_DEVICES=0 and restart Ollama), put that number into
+$OllamaGpu. Then only that card pauses, and the other one no longer counts Ollama's memory as
+foreign.
 
 Web page
 --------
 A small web server starts with the search. In a browser, http://<computername>:8080/ shows all
 cards with speed and temperature, also from another computer in the same network (on the search
-computer itself http://localhost:8080/ works too). It also has buttons for pause, resume and automatic.
+computer itself http://localhost:8080/ works too). It also has buttons for pause, resume and automatic,
+plus a slider for the power limit (the range comes from the card).
 The script creates the required firewall rule on the first start, but only for private
 networks. If the network is set to "Public" in the Windows settings, the page stays invisible to
 other computers - then switch it to "Private" there. The page has no password: do not forward this
@@ -137,10 +146,14 @@ In puzzle-config.ps1:
 
 With 'tray' the window disappears and one icon per card appears in the notification area at the
 bottom right. Left click shows or hides the window, minimising sends it back there. Right click:
-search on/off, auto pause, web page, quit. Windows 11 first puts new icons into the overflow
+search on/off, auto pause, web page, "About Heuhaufen" and quit. Windows 11 first puts new icons into the overflow
 (arrow up) - drag it into the bar once. While the window is hidden, Ctrl+C and the X do not
 work; quit via the menu then. If the search ends with a hit or an error, the window appears
 by itself.
+
+"About Heuhaufen" opens a small window with the logo, the project address on GitHub and two QR codes
+for donations (on-chain and Lightning). If you would rather not have it, delete the folder
+skripte\about - the images in the window then simply stay empty.
 
 What the dashboard remembers
 ----------------------------

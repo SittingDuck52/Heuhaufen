@@ -513,7 +513,7 @@ function Test-Karte($g) {
         Index = $i; Name = $g.Name; Key = (($g.Name -replace '^NVIDIA\s+', '') -replace '^GeForce\s+', '').Trim()
         Ok = $false; Grund = ''; Treiber = ''; Reihe = @(); Leistung = @(); Wahl = $null; PlWahl = $null
         PlDef = [double]::NaN; PlMin = [double]::NaN; PlMax = [double]::NaN; LimitGemessen = $false; Hinweise = @()
-        Gemeinsam = @(); GemLimit = $null; GemKarten = @()
+        Gemeinsam = @(); GemLimit = $null; GemKarten = @(); TempGleich = $false
     }
     Write-Host ''
     Write-Host "   ===== GPU ${i}: $($g.Name) =====" -ForegroundColor Cyan
@@ -788,10 +788,17 @@ function Invoke-GemStufe($e, $karten, [double]$limit, [bool]$setzen) {
     }
     # Drosselt eine Karte? Meldung des Treibers, zu wenig Leistung trotz Hitze, oder deutlich langsamer als die schnellste
     $top = Hoechst (@($ergeb | Where-Object { $_.Ok }) | ForEach-Object { $_.MKey })
+    # Manche Treiber liefern fuer jede Karte dieselbe Temperatur (an zwei RTX 2080 Ti belegt:
+    # nvidia-smi meldet identische Werte, das Werkzeug des Herstellers unterschiedliche). Dann sagt die
+    # Temperatur nichts ueber die einzelne Karte und wird nicht als Kriterium benutzt; Luefter, Leistung
+    # und Tempo bleiben.
+    $tOk = @($ergeb | Where-Object { $_.Ok })
+    $tempGleich = ($tOk.Count -gt 1 -and (@($tOk | ForEach-Object { [math]::Round([double]$_.Temp, 1) } | Sort-Object -Unique)).Count -eq 1)
+    if ($tempGleich) { $e.TempGleich = $true }
     foreach ($r in $ergeb) {
         $gr = @()
         if ($r.Drossel -ge 0.2) { $gr += (T 'tun.befund.temperatur') }
-        if ($limit -gt 0 -and $r.Watt -lt 0.85 * $limit -and $r.Util -ge 80 -and ($r.Temp -ge 83 -or $r.Fan -ge 90)) { $gr += (T 'tun.befund.leistung') }
+        if ($limit -gt 0 -and $r.Watt -lt 0.85 * $limit -and $r.Util -ge 80 -and ((-not $tempGleich -and $r.Temp -ge 83) -or $r.Fan -ge 90)) { $gr += (T 'tun.befund.leistung') }
         if ($ergeb.Count -gt 1 -and $r.Ok -and $r.MKey -lt 0.9 * $top) { $gr += (T 'tun.befund.langsamer') }
         $r.Befund = $gr -join ', '
     }
@@ -815,6 +822,27 @@ function Show-GemStufe($s) {
     }
 }
 
+# Welches Limit wird eingetragen, wenn eine Karte bis zur letzten Stufe drosselt? Nicht die letzte - die ist
+# die langsamste (gemessen 154 W: 1.471 MKey/s statt 2.097 bei 211 W). Genommen wird wie bei der
+# Einzelmessung der sparsamste Punkt, der praktisch genauso viel schafft: unter den Stufen mit mindestens
+# 90 % des besten Gesamttempos die effizienteste, und bei fast gleicher Effizienz das niedrigere Limit.
+function Get-GemWahl($stufen) {
+    $z = @()
+    foreach ($s in $stufen) {
+        $ok = @($s.Karten | Where-Object { $_.Ok })
+        if ($ok.Count -eq 0) { continue }
+        $sm = ($ok | Measure-Object MKey -Sum).Sum
+        $sw = ($ok | Measure-Object Watt -Sum).Sum
+        if ($sw -le 0 -or $sm -le 0) { continue }
+        $z += [pscustomobject]@{ Limit = [int]$s.Limit; MKey = [double]$sm; Eff = [double]$sm / [double]$sw }
+    }
+    if ($z.Count -eq 0) { return $null }
+    $top = Hoechst ($z | ForEach-Object { $_.MKey })
+    $gut = @($z | Where-Object { $_.MKey -ge 0.9 * $top })
+    if ($gut.Count -eq 0) { $gut = @($z) }
+    $bEff = Hoechst ($gut | ForEach-Object { $_.Eff })
+    @($gut | Where-Object { $_.Eff -ge 0.98 * $bEff } | Sort-Object Limit)[0].Limit
+}
 function Invoke-Gemeinsam($e, $karten) {
     Write-Host ''
     Write-Host ((T 'tun.gem.titel') + (($karten | ForEach-Object { "GPU $($_.Index)" }) -join ' + ') + " ($($e.Key)) =====") -ForegroundColor Cyan
@@ -874,8 +902,9 @@ function Invoke-Gemeinsam($e, $karten) {
             $neu = [int][math]::Round($L * $GemeinsamFaktor)
             if ($neu -lt $plMin) { $neu = [int][math]::Ceiling($plMin) }
             if ($neu -gt $L - 5 -or $n -ge $GemeinsamStufenMax) {
-                $e.GemLimit = [int]$L
-                $e.Hinweise += (T 'tun.gem.drosseltImmer' $namen ([int]$L))
+                $w = Get-GemWahl $e.Gemeinsam
+                $e.GemLimit = if ($w) { [int]$w } else { [int]$L }
+                $e.Hinweise += (T 'tun.gem.drosseltImmer' $namen ([int]$L) $e.GemLimit)
                 break
             }
             Write-Host (T 'tun.gem.naechsteStufe' $namen $neu) -ForegroundColor Yellow
@@ -885,6 +914,10 @@ function Invoke-Gemeinsam($e, $karten) {
         if ($limitAn) { foreach ($k in $karten) { if (-not [double]::IsNaN($plStart[$k.Index])) { & $smi -i $k.Index -pl ([int]$plStart[$k.Index]) | Out-Null } } }
         [P71T.Guard]::ResetArgs = ''
     }
+
+    # Einmal melden, wenn die Karten keine getrennten Temperaturen liefern - sonst wundert sich
+    # jemand ueber identische Werte in der Tabelle.
+    if ($e.TempGleich) { $e.Hinweise += (T 'tun.gem.tempGleich'); Write-Host "   $($e.Hinweise[-1])" -ForegroundColor Yellow }
 }
 
 # ---------- Eintrag in puzzle-config.ps1 ----------

@@ -108,6 +108,10 @@ $WebHtml = @'
  button:active { transform:translateY(1px); }
  button.los { border-color:#2f7d4f; color:#9fe6bd; }
  button:disabled { opacity:.4; cursor:default; }
+ .regler { display:flex; align-items:center; gap:9px; margin-top:11px; font-size:13px; color:var(--grau); }
+ .regler label { white-space:nowrap; }
+ .regler input[type=range] { flex:1; min-width:70px; accent-color:#2f7d4f; cursor:pointer; height:18px; }
+ .regler .lw { min-width:52px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums; }
  .meldung { margin-top:10px; font-size:12px; color:var(--gelb); min-height:16px; }
  svg { width:100%; height:64px; display:block; margin-top:10px; }
  .treffer { margin:18px auto 0; max-width:736px; padding:14px 16px; border-radius:10px;
@@ -207,6 +211,15 @@ function karte(d){
        balken(tx('web.l.luefter'), n0(d.luefter) + ' %', d.luefter/100, 'var(--blau)') +
        balken(tx('web.l.auslastung'), n0(d.last) + ' %', d.last/100, 'var(--blau)') +
        '</div>';
+  // Schieberegler fuer das Power-Limit, direkt unter den Balken - die Knoepfe bleiben unten an der Kachel.
+  // Grenzen kommen von der Karte; waehrend er bewegt wird, zeichnet die Seite nicht neu (sonst spraenge er zurueck).
+  if (d.limitMin && d.limitMax > d.limitMin && d.alter <= 30 && !ENDE[d.zustand] && d.zustand !== 'found') {
+    var lw = d.limitSoll || d.limit || d.limitMin;
+    h += '<div class="regler"><label>' + tx('web.limit') + '</label>'
+       + '<input type="range" min="' + d.limitMin + '" max="' + d.limitMax + '" step="' + (d.limitSchritt || 5) + '" value="' + lw + '"'
+       + " data-pc='" + d.pc + "' data-gpu='" + d.gpu + "' data-puzzle='" + d.puzzle + "'>"
+       + '<span class="lw">' + lw + ' W</span></div>';
+  }
   h += '<div class="zeile">VRAM <b>' + n0(d.vram) + '</b> ' + tx('web.vram.von') + ' ' + n0(d.vramGesamt) + ' MB, ' + tx('web.vram.fremd') + ' <b>' + n0(d.vramFremd) + ' MB</b></div>';
   if (d.ollama) {
     if (!d.ollama.erreichbar) h += '<div class="zeile">' + tx('web.ollama.nichtErreichbar') + '</div>';
@@ -246,7 +259,29 @@ document.addEventListener('click', function(e){
   if (e.target && e.target.tagName === 'BUTTON' && e.target.dataset.was) befehl(e.target);
 });
 
+// Schieberegler: waehrend des Ziehens nur die Zahl mitfuehren, erst beim Loslassen senden.
+// reglerBis haelt das Neuzeichnen an, sonst springt der Schieber beim naechsten Abruf zurueck.
+var reglerBis = 0;
+document.addEventListener('input', function(e){
+  var r = e.target;
+  if (!r || r.type !== 'range' || !r.dataset.pc) return;
+  reglerBis = Date.now() + 4000;
+  var s = r.parentNode.querySelector('.lw');
+  if (s) s.textContent = r.value + ' W';
+});
+document.addEventListener('change', function(e){
+  var r = e.target;
+  if (!r || r.type !== 'range' || !r.dataset.pc) return;
+  reglerBis = Date.now() + 3000;
+  fetch('api/befehl', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ was: 'pl_' + r.value, pc: r.dataset.pc, gpu: r.dataset.gpu, puzzle: r.dataset.puzzle })
+  }).then(function(){ setTimeout(hole, 1500); }).catch(function(){});
+});
+
 function zeichne(liste){
+  if (reglerBis > Date.now()) return;   // Regler wird gerade bewegt
   var m = document.getElementById('karten');
   if (!liste.length) { m.innerHTML = '<div class="leer">' + tx('web.leer') + '</div>'; return; }
   m.innerHTML = liste.map(karte).join('');
@@ -312,7 +347,8 @@ function Invoke-WebAnfrage($ctx) {
                 $gpu = "$($d.gpu)"
                 $puz = "$($d.puzzle)"
                 # streng pruefen: nur bekannte Befehle und saubere Namen kommen durch
-                if ($was -in @('pause','weiter','start','auto') -and
+                # pl_<watt> stellt das Power-Limit; das Fenster klemmt den Wert auf die Grenzen der Karte
+                if (($was -in @('pause','weiter','start','auto') -or $was -match '^pl_\d{2,4}$') -and
                     $pc -match '^[A-Za-z0-9_\-]{1,32}$' -and $gpu -match '^\d{1,2}$' -and $puz -match '^\d{1,3}$') {
                     try {
                         Set-Content -Encoding ascii -Path (Join-Path $WebOrdner "befehl$puz-$pc-gpu$gpu.txt") -Value $was

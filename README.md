@@ -1,4 +1,4 @@
-# Heuhaufen 1.23
+# Heuhaufen 1.24
 
 | Dashboard (Deutsch) | Dashboard (English) | Home Assistant Card |
 | --- | --- | --- |

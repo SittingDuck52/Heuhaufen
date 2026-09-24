@@ -1,4 +1,4 @@
-Heuhaufen 1.23 - Suche nach dem Schluessel eines Bitcoin-Puzzles
+Heuhaufen 1.24 - Suche nach dem Schluessel eines Bitcoin-Puzzles
 ================================================================
 
 Worum es geht
@@ -99,6 +99,9 @@ Tasten
       Steht StartWartet in der Konfiguration auf $true, startet P die Suche ueberhaupt erst.
   V   Automatische Pause an/aus (siehe "Automatische Pause").
   W   Webseite an/aus (nur wenn WebPort gesetzt ist).
+  + -  Power-Limit der Karte um 5 W hoeher oder niedriger, sofort wirksam. Der Wert wird
+      gemerkt und gilt beim naechsten Start vor der Konfiguration (LimitSchritt aendert die
+      Schrittweite). In Home Assistant gibt es dafuer einen Schieberegler.
   Strg+C fragt nach: J beendet, N (oder 30 s nichts) sucht weiter.
 
 Automatische Pause
@@ -116,12 +119,18 @@ setzen, z. B. 3000.
 Laeuft auf demselben Rechner Ollama, kann das Dashboard es direkt fragen ($OllamaApi in
 puzzle-config.ps1). Dann haelt die Suche an, sobald Ollama rechnet, und ein geparktes Modell stoert
 nicht.
+Bei mehreren Karten pausieren sonst alle, sobald Ollama rechnet - Ollamas Schnittstelle sagt
+naemlich nicht, auf welcher Karte das Modell liegt. Wer Ollama fest auf eine Karte legt (die
+Umgebungsvariablen CUDA_DEVICE_ORDER=PCI_BUS_ID und CUDA_VISIBLE_DEVICES=0 setzen und Ollama neu
+starten), traegt diese Nummer als $OllamaGpu in die Konfiguration ein. Dann pausiert nur diese
+Karte, und die andere rechnet Ollamas Speicher auch nicht als "fremd" mit.
 
 Webseite
 --------
 Mit der Suche startet ein kleiner Webserver. Im Browser zeigt http://<rechnername>:8080/ alle Karten
 samt Tempo und Temperatur, auch von einem anderen Rechner im selben Netz (auf dem Suchrechner selbst
-geht auch http://localhost:8080/). Dort gibt es auch Knoepfe fuer Pause, Weiter und Automatik.
+geht auch http://localhost:8080/). Dort gibt es auch Knoepfe fuer Pause, Weiter und Automatik sowie
+einen Schieberegler fuer das Power-Limit (Grenzen kommen von der Karte).
 Die noetige Firewall-Regel legt das Skript beim ersten Start selbst an, allerdings nur fuer private
 Netze. Steht das Netzwerk in den Windows-Einstellungen auf "Oeffentlich", bleibt die Seite fuer andere
 Rechner unsichtbar - dann dort auf "Privat" umstellen. Die Seite hat kein Passwort: diesen Port nicht
@@ -138,10 +147,14 @@ In puzzle-config.ps1:
 
 Mit 'tray' verschwindet das Fenster, unten rechts im Infobereich erscheint je Karte ein Symbol.
 Linksklick zeigt oder versteckt das Fenster, Minimieren schickt es wieder dorthin. Rechtsklick:
-Suche an/aus, Auto-Pause, Webseite, Beenden. Windows 11 legt neue Symbole zuerst in den Ueberlauf
+Suche an/aus, Auto-Pause, Webseite, "Ueber Heuhaufen" und Beenden. Windows 11 legt neue Symbole zuerst in den Ueberlauf
 (Pfeil nach oben) - einmal in die Leiste ziehen. Solange das Fenster versteckt ist, gehen Strg+C
 und das X nicht; beendet wird dann ueber das Menue. Endet die Suche mit einem Treffer oder Fehler,
 erscheint das Fenster von selbst.
+
+"Ueber Heuhaufen" zeigt ein kleines Fenster mit Logo, der Adresse des Projekts auf GitHub und zwei
+QR-Codes fuer Spenden (on-chain und Lightning). Wer das nicht mag, loescht den Ordner skripte\about -
+dann bleiben die Bilder im Fenster einfach leer.
 
 Was sich das Dashboard merkt
 ----------------------------
